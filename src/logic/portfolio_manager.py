@@ -72,11 +72,23 @@ def generate_rebalance_plan(target_allocations: Dict[str, float]) -> List[Dict[s
 def execute_rebalance_trades(trades: List[Dict[str, Any]]) -> List[str]:
     """
     Takes a list of proposed trades and executes them.
-    Returns a log of what happened.
+    CRITICAL: Executes ALL 'SELL' orders before 'BUY' orders to ensure USDT liquidity.
     """
     results = []
     
-    for trade in trades:
+    # 1. Sort trades: SELLS first, then BUYS
+    # We use list comprehensions to separate them cleanly
+    sells = [t for t in trades if t['action'].upper() == 'SELL']
+    buys = [t for t in trades if t['action'].upper() == 'BUY']
+    
+    # Combine them back into one ordered list
+    ordered_trades = sells + buys
+    
+    if sells and buys:
+        results.append(f"ℹ️ Optimization: Reordered {len(sells)} sells before {len(buys)} buys.")
+    
+    # 2. Execute in order
+    for trade in ordered_trades:
         asset = trade['asset']
         action = trade['action'].lower() # 'buy' or 'sell'
         amount = trade['amount']
