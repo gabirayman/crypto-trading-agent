@@ -1,14 +1,7 @@
-I need to make config file and config manager:
-    whitelist coins
-    minimum amount to ignore
+make tests they are not updated. 
 
-I need to make more modular, like plan_portfolio_rebalance returns user friendly results, and we want results
-to be used in other functions like making trades based on this list. so make a high level function
-for the tool and have it call a technical function.
+clean up so that server only calls manager, and manager calls client for server.
 
 thing about how to make it easy to add more features and checks without changing too much. 
 
-next step is to test plan_portfolio_rebalance 
-then make make trade function
-then make a rebalance portfolio function.
 
