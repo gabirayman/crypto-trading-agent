@@ -1,91 +1,8 @@
-###################################################
-# first version
-###################################################
-
-# from fastmcp import FastMCP
-# from exchanges.client import fetch_price
-
-# # Initialize the MCP Server
-# mcp = FastMCP("Crypto Rebalancer")
-
-# @mcp.tool()
-# def get_crypto_price(asset: str) -> str:
-#     """
-#     Get the current price of a crypto asset in USDT.
-#     Args:
-#         asset: The ticker symbol (e.g., BTC, ETH, SOL)
-#     """
-#     # Force uppercase for consistency
-#     symbol = f"{asset.upper()}/USDT"
-    
-#     price = fetch_price(symbol)
-    
-#     if isinstance(price, str) and "Error" in price:
-#         return f"Could not fetch price for {asset}. Reason: {price}"
-        
-#     return f"The current price of {asset} is ${price}"
-
-# if __name__ == "__main__":
-#     mcp.run()
-
-###################################################
-# second version
-###################################################
-
-# from fastmcp import FastMCP
-# from exchanges.client import fetch_price, fetch_account_balance 
-
-# mcp = FastMCP("Crypto Rebalancer")
-
-# @mcp.tool()
-# def get_crypto_price(asset: str) -> str:
-#     """
-#     Get the current price of a crypto asset in USDT.
-#     Args:
-#         asset: The ticker symbol (e.g., BTC, ETH, SOL)
-#     """
-#     symbol = f"{asset.upper()}/USDT"
-#     price = fetch_price(symbol)
-    
-#     if isinstance(price, str) and "Error" in price:
-#         return f"Could not fetch price for {asset}. Reason: {price}"
-        
-#     return f"The current price of {asset} is ${price}"
-
-# @mcp.tool()
-# def get_my_portfolio() -> str:
-#     """
-#     Get the current non-zero balances in the user's portfolio.
-#     """
-#     data = fetch_account_balance()
-    
-#     if isinstance(data, str) and "Error" in data:
-#         return f"Could not fetch balance. Check your API Keys. Details: {data}"
-    
-#     # Filter: Only show assets where you have money
-#     # data looks like: {'BTC': 0.5, 'ETH': 0.0, 'XRP': 0.0 ...}
-#     my_assets = []
-#     for asset, amount in data.items():
-#         if amount > 0:
-#             my_assets.append(f"- {asset}: {amount}")
-            
-#     if not my_assets:
-#         return "Your portfolio is empty (0 balance)."
-        
-#     return "Current Portfolio:\n" + "\n".join(my_assets)
-
-# if __name__ == "__main__":
-#     mcp.run()
-
-###################################################
-# third version with rebalance tool
-###################################################
-
 import json
 from fastmcp import FastMCP
-from exchanges.client import fetch_price, fetch_account_balance
-# We import your renamed logic file here:
-from logic.rebalance_by_percentage import calculate_rebalance_plan
+from exchanges.client import fetch_price, fetch_account_balance, execute_order
+from logic.portfolio_manager import generate_rebalance_plan, execute_rebalance_trades, execute_single_trade
+from config_manager import set_min_threshold, update_sub_wallet
 
 mcp = FastMCP("Crypto Rebalancer")
 
@@ -109,11 +26,9 @@ def get_my_portfolio() -> str:
     if isinstance(data, str) and "Error" in data:
         return data
     
-    # Filter for non-zero assets
     lines = []
     for asset, amount in data.items():
-        if amount > 0:
-            lines.append(f"{asset}: {amount}")
+        lines.append(f"{asset}: {amount}")
             
     if not lines:
         return "Portfolio is empty."
@@ -122,50 +37,120 @@ def get_my_portfolio() -> str:
 @mcp.tool()
 def plan_portfolio_rebalance(target_percentages: str) -> str:
     """
-    Calculates a rebalance plan based on target percentages.
-    
-    Args:
-        target_percentages: A JSON string of targets summing to 1.0 (e.g. '{"BTC": 0.5, "ETH": 0.5}')
+    Calculates a rebalance plan. 
+    Input must be a JSON string like: '{"BTC": 0.5, "ETH": 0.5}'
     """
     try:
-        # 1. Parse the User's Input
+        # 1. Parse the Input (Chat Layer)
         targets = json.loads(target_percentages)
         
-        # 2. Get Real Data (Balances)
-        balances = fetch_account_balance()
-        if isinstance(balances, str) and "Error" in balances:
-            return f"Error fetching balances: {balances}"
-
-        # 3. Get Real Data (Prices)
-        # We need prices for BOTH what we have AND what we want
-        needed_prices = set(balances.keys()) | set(targets.keys())
-        current_prices = {}
+        # 2. Call the Business Logic (Service Layer)
+        trades = generate_rebalance_plan(targets)
         
-        for asset in needed_prices:
-            if asset == "USDT":
-                continue # USDT is always $1
-            
-            # Fetch price and store it
-            price = fetch_price(f"{asset.upper()}/USDT")
-            if not isinstance(price, (int, float)):
-                continue # Skip assets where price fetch failed
-            current_prices[f"{asset}/USDT"] = price
-
-        # 4. The "Brain" (Your Logic File)
-        trades = calculate_rebalance_plan(balances, current_prices, targets)
-        
-        # 5. Format the Output for the Chat
+        # 3. Format the Output (Presentation Layer)
         if not trades:
-            return "No trades needed! Your portfolio is already balanced."
+            return "No trades needed. Portfolio is balanced."
             
-        summary = "Proposed Rebalance Plan:\n"
-        for trade in trades:
-            summary += f"- {trade['action']} ${trade['value_usdt']} worth of {trade['asset']} ({trade['amount']} coins)\n"
-            
-        return summary
+        return json.dumps(trades, indent=2)
 
+    except json.JSONDecodeError:
+        return "Error: Invalid JSON format. Please provide targets like '{\"BTC\": 0.5}'"
     except Exception as e:
-        return f"Calculation failed: {str(e)}"
+        return f"System Error: {str(e)}"
+
+@mcp.tool()
+def create_sub_wallet(coins_list: str) -> str:
+    """
+    Creates a sub-wallet configuration from a comma-separated list of coins.
+    Example input: '["BTC", "ETH", "SOL"]'
+    """
+    try:
+        coins = json.loads(coins_list)
+        if not isinstance(coins, list) or not all(isinstance(c, str) for c in coins):
+            return "Error: Please provide a JSON array of coin symbols."
+        
+        update_sub_wallet(coins)
+        return f"Sub-wallet created with assets: {', '.join(coins)}"
+    except json.JSONDecodeError:
+        return "Error: Invalid JSON format. Please provide a list like '[\"BTC\", \"ETH\"]'."
+    except Exception as e:
+        return f"System Error: {str(e)}"
+
+@mcp.tool()
+def set_min_balance_threshold(threshold_value: float) -> str:
+    """
+    Sets the minimum balance threshold for filtering assets.
+    Example input: 10.0
+    """
+    try:
+        if threshold_value < 0:
+            return "Error: Threshold must be non-negative."
+        
+        set_min_threshold(threshold_value)
+        return f"Minimum balance threshold set to {threshold_value}."
+    except Exception as e:
+        return f"System Error: {str(e)}"
+
+@mcp.tool()
+def execute_trading_plan(trades_json: str) -> str:
+    """
+    Executes the list of trades. 
+    WARNING: This will move real funds if not in Sandbox Mode.
+    
+    Args:
+        trades_json: The JSON string returned by 'plan_portfolio_rebalance'.
+                     Example: '[{"action": "SELL", "asset": "BTC", "amount": 0.1, ...}]'
+    """
+    try:
+        # 1. Parse the plan
+        trades = json.loads(trades_json)
+        
+        if not isinstance(trades, list):
+            return "Error: Input must be a list of trades."
+            
+        if not trades:
+            return "No trades to execute."
+
+        # 2. Execute
+        logs = execute_rebalance_trades(trades)
+        
+        return "\n".join(logs)
+
+    except json.JSONDecodeError:
+        return "Error: Invalid JSON format."
+    except Exception as e:
+        return f"Execution Error: {str(e)}"
+
+@mcp.tool()
+def trade_single(trade_json: str) -> str:
+    """
+    Execute a single trade.
+    Input JSON example: '{"asset": "BTC", "action": "sell", "amount": 0.1}'
+    """
+    try:
+        data = json.loads(trade_json)
+        asset = data.get("asset")
+        action = data.get("action")
+        amount = data.get("amount")
+
+        # if not asset or not isinstance(asset, str):
+        #     return "Error: 'asset' must be a non-empty string."
+        # if not action or not isinstance(action, str) or action.lower() not in ("buy", "sell"):
+        #     return "Error: 'action' must be 'buy' or 'sell'."
+        # try:
+        #     amount = float(amount)
+        # except Exception:
+        #     return "Error: 'amount' must be a number."
+        # if amount <= 0:
+        #     return "Error: 'amount' must be greater than zero."
+
+        result = execute_single_trade(asset, action, amount)
+        return json.dumps(result, indent=2)
+
+    except json.JSONDecodeError:
+        return "Error: Invalid JSON format. Provide like '{\"asset\":\"BTC\",\"action\":\"sell\",\"amount\":0.1}'."
+    except Exception as e:
+        return f"Execution Error: {str(e)}"
 
 if __name__ == "__main__":
     mcp.run()

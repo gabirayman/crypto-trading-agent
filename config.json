@@ -1,0 +1,10 @@
+{
+    "min_balance_threshold": 0.0001,
+    "sub_wallet_assets": [
+        "BTC",
+        "ETH",
+        "USDT",
+        "XRP",
+        "LINK"
+    ]
+}
