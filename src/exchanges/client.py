@@ -2,7 +2,7 @@ import ccxt.pro as ccxt
 import ccxt
 import os
 from dotenv import load_dotenv
-from config_manager import get_relevant_coins
+from config_manager import get_relevant_coins, add_coin_to_sub_wallet
 
 # Load the keys from the .env file
 load_dotenv()
@@ -84,6 +84,10 @@ def execute_order(symbol: str, side: str, amount: float):
         # 2. Create the Order
         # 'market' means execute immediately at current price
         order = exchange.create_order(symbol, 'market', side, amount)
+
+        # Add bought coin to sub-wallet automatically
+        base_asset = symbol.split('/')[0]
+        add_coin_to_sub_wallet(base_asset)
         
         return {
             "status": "success",

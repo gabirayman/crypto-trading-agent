@@ -69,3 +69,12 @@ def set_min_threshold(val: float):
     conf = load_config()
     conf["min_balance_threshold"] = val
     save_config(conf)
+
+def add_coin_to_sub_wallet(coin: str):
+    conf = load_config()
+    coin_upper = coin.upper()
+    if "sub_wallet_assets" not in conf:
+        conf["sub_wallet_assets"] = []
+    if coin_upper not in conf["sub_wallet_assets"]:
+        conf["sub_wallet_assets"].append(coin_upper)
+        save_config(conf)

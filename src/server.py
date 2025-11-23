@@ -1,7 +1,7 @@
 import json
 from fastmcp import FastMCP
 from exchanges.client import fetch_price, fetch_account_balance, execute_order
-from logic.portfolio_manager import generate_rebalance_plan, execute_rebalance_trades, execute_single_trade
+from logic.portfolio_manager import generate_rebalance_plan, execute_rebalance_trades, execute_single_trade, get_portfolio_data
 from config_manager import set_min_threshold, update_sub_wallet
 
 mcp = FastMCP("Crypto Rebalancer")
@@ -151,6 +151,23 @@ def trade_single(trade_json: str) -> str:
         return "Error: Invalid JSON format. Provide like '{\"asset\":\"BTC\",\"action\":\"sell\",\"amount\":0.1}'."
     except Exception as e:
         return f"Execution Error: {str(e)}"
+
+@mcp.tool()
+def get_total_portfolio_value() -> str:
+    """
+    Calculates the total value of the portfolio in USDT.
+    """
+    try:
+        # Reuse our existing logic function
+        data = get_portfolio_data()
+        
+        total_value = data.get('total_value_usdt', 0.0)
+        
+        # Format nicely with commas (e.g., $10,234.56)
+        return f"Total Portfolio Value: ${total_value:,.2f} USDT"
+        
+    except Exception as e:
+        return f"Error calculating value: {str(e)}"
 
 if __name__ == "__main__":
     mcp.run()
